@@ -1,0 +1,265 @@
+/*==============================================================================
+ * File: 07_triggers.sql
+ * Purpose: Create triggers for audit and business logic
+ * Layer: Physical Layer
+ * Author: Restaurant POS System
+ * Date: 2025-11-05
+ *============================================================================*/
+
+PROMPT
+PROMPT ========================================
+PROMPT Creating Triggers
+PROMPT ========================================
+PROMPT
+
+-- ============================================================================
+-- ORDERING Feature Triggers
+-- ============================================================================
+
+PROMPT Creating triggers for ORDERING feature...
+
+-- Trigger: Auto-populate ORDER_ID and audit columns on INSERT
+CREATE OR REPLACE TRIGGER TRG_TBL_ORD_ORDERS_BIR
+BEFORE INSERT ON TBL_ORD_ORDERS
+FOR EACH ROW
+BEGIN
+  IF :NEW.ORDER_ID IS NULL THEN
+    :NEW.ORDER_ID := SEQ_ORD_ORDERS.NEXTVAL;
+  END IF;
+
+  IF :NEW.ORDER_NUMBER IS NULL THEN
+    :NEW.ORDER_NUMBER := 'ORD-' || LPAD(:NEW.ORDER_ID, 6, '0');
+  END IF;
+
+  :NEW.CREATED_BY := NVL(:NEW.CREATED_BY, USER);
+  :NEW.CREATED_DATE := NVL(:NEW.CREATED_DATE, SYSDATE);
+END;
+/
+
+-- Trigger: Update audit columns on UPDATE
+CREATE OR REPLACE TRIGGER TRG_TBL_ORD_ORDERS_BUR
+BEFORE UPDATE ON TBL_ORD_ORDERS
+FOR EACH ROW
+BEGIN
+  :NEW.UPDATED_BY := USER;
+  :NEW.UPDATED_DATE := SYSDATE;
+
+  -- Set completed date when status changes to COMPLETED
+  IF :NEW.STATUS = 'COMPLETED' AND :OLD.STATUS != 'COMPLETED' THEN
+    :NEW.COMPLETED_DATE := SYSDATE;
+  END IF;
+END;
+/
+
+-- Trigger: Auto-populate ITEM_ID on INSERT
+CREATE OR REPLACE TRIGGER TRG_TBL_ORD_ITEMS_BIR
+BEFORE INSERT ON TBL_ORD_ORDER_ITEMS
+FOR EACH ROW
+BEGIN
+  IF :NEW.ITEM_ID IS NULL THEN
+    :NEW.ITEM_ID := SEQ_ORD_ORDER_ITEMS.NEXTVAL;
+  END IF;
+
+  :NEW.CREATED_DATE := NVL(:NEW.CREATED_DATE, SYSDATE);
+END;
+/
+
+-- ============================================================================
+-- BILLING Feature Triggers
+-- ============================================================================
+
+PROMPT Creating triggers for BILLING feature...
+
+-- Trigger: Auto-populate BILL_ID and audit columns on INSERT
+CREATE OR REPLACE TRIGGER TRG_TBL_BIL_BILLS_BIR
+BEFORE INSERT ON TBL_BIL_BILLS
+FOR EACH ROW
+BEGIN
+  IF :NEW.BILL_ID IS NULL THEN
+    :NEW.BILL_ID := SEQ_BIL_BILLS.NEXTVAL;
+  END IF;
+
+  IF :NEW.BILL_NUMBER IS NULL THEN
+    :NEW.BILL_NUMBER := 'BILL-' || LPAD(:NEW.BILL_ID, 6, '0');
+  END IF;
+
+  :NEW.CREATED_BY := NVL(:NEW.CREATED_BY, USER);
+  :NEW.CREATED_DATE := NVL(:NEW.CREATED_DATE, SYSDATE);
+END;
+/
+
+-- Trigger: Update audit columns on UPDATE
+CREATE OR REPLACE TRIGGER TRG_TBL_BIL_BILLS_BUR
+BEFORE UPDATE ON TBL_BIL_BILLS
+FOR EACH ROW
+BEGIN
+  :NEW.UPDATED_BY := USER;
+  :NEW.UPDATED_DATE := SYSDATE;
+
+  -- Set paid date when status changes to PAID
+  IF :NEW.PAYMENT_STATUS = 'PAID' AND :OLD.PAYMENT_STATUS != 'PAID' THEN
+    :NEW.PAID_DATE := SYSDATE;
+  END IF;
+END;
+/
+
+-- Trigger: Auto-populate PAYMENT_ID on INSERT
+CREATE OR REPLACE TRIGGER TRG_TBL_BIL_PAYMENTS_BIR
+BEFORE INSERT ON TBL_BIL_PAYMENTS
+FOR EACH ROW
+BEGIN
+  IF :NEW.PAYMENT_ID IS NULL THEN
+    :NEW.PAYMENT_ID := SEQ_BIL_PAYMENTS.NEXTVAL;
+  END IF;
+
+  :NEW.PAYMENT_DATE := NVL(:NEW.PAYMENT_DATE, SYSDATE);
+  :NEW.PROCESSED_BY := NVL(:NEW.PROCESSED_BY, USER);
+END;
+/
+
+-- ============================================================================
+-- DELIVERY Feature Triggers
+-- ============================================================================
+
+PROMPT Creating triggers for DELIVERY feature...
+
+-- Trigger: Auto-populate DRIVER_ID on INSERT
+CREATE OR REPLACE TRIGGER TRG_TBL_DEL_DRIVERS_BIR
+BEFORE INSERT ON TBL_DEL_DRIVERS
+FOR EACH ROW
+BEGIN
+  IF :NEW.DRIVER_ID IS NULL THEN
+    :NEW.DRIVER_ID := SEQ_DEL_DRIVERS.NEXTVAL;
+  END IF;
+
+  :NEW.CREATED_DATE := NVL(:NEW.CREATED_DATE, SYSDATE);
+END;
+/
+
+-- Trigger: Update UPDATED_DATE on driver update
+CREATE OR REPLACE TRIGGER TRG_TBL_DEL_DRIVERS_BUR
+BEFORE UPDATE ON TBL_DEL_DRIVERS
+FOR EACH ROW
+BEGIN
+  :NEW.UPDATED_DATE := SYSDATE;
+END;
+/
+
+-- Trigger: Auto-populate DELIVERY_ID on INSERT
+CREATE OR REPLACE TRIGGER TRG_TBL_DEL_DELIVERIES_BIR
+BEFORE INSERT ON TBL_DEL_DELIVERIES
+FOR EACH ROW
+BEGIN
+  IF :NEW.DELIVERY_ID IS NULL THEN
+    :NEW.DELIVERY_ID := SEQ_DEL_DELIVERIES.NEXTVAL;
+  END IF;
+
+  IF :NEW.DELIVERY_NUMBER IS NULL THEN
+    :NEW.DELIVERY_NUMBER := 'DEL-' || LPAD(:NEW.DELIVERY_ID, 6, '0');
+  END IF;
+
+  :NEW.CREATED_DATE := NVL(:NEW.CREATED_DATE, SYSDATE);
+END;
+/
+
+-- Trigger: Update timestamps and driver availability on delivery status change
+CREATE OR REPLACE TRIGGER TRG_TBL_DEL_DELIVERIES_BUR
+BEFORE UPDATE ON TBL_DEL_DELIVERIES
+FOR EACH ROW
+BEGIN
+  :NEW.UPDATED_DATE := SYSDATE;
+
+  -- Set actual pickup time when status changes to PICKED_UP
+  IF :NEW.STATUS = 'PICKED_UP' AND :OLD.STATUS != 'PICKED_UP' THEN
+    :NEW.ACTUAL_PICKUP_TIME := SYSDATE;
+  END IF;
+
+  -- Set actual delivery time when status changes to DELIVERED
+  IF :NEW.STATUS = 'DELIVERED' AND :OLD.STATUS != 'DELIVERED' THEN
+    :NEW.ACTUAL_DELIVERY_TIME := SYSDATE;
+  END IF;
+END;
+/
+
+-- Trigger: Auto-populate TRACKING_ID on INSERT
+CREATE OR REPLACE TRIGGER TRG_TBL_DEL_TRACKING_BIR
+BEFORE INSERT ON TBL_DEL_DELIVERY_TRACKING
+FOR EACH ROW
+BEGIN
+  IF :NEW.TRACKING_ID IS NULL THEN
+    :NEW.TRACKING_ID := SEQ_DEL_TRACKING.NEXTVAL;
+  END IF;
+
+  :NEW.TRACKING_DATE := NVL(:NEW.TRACKING_DATE, SYSDATE);
+END;
+/
+
+-- ============================================================================
+-- RESERVATIONS Feature Triggers
+-- ============================================================================
+
+PROMPT Creating triggers for RESERVATIONS feature...
+
+-- Trigger: Auto-populate TABLE_ID on INSERT
+CREATE OR REPLACE TRIGGER TRG_TBL_RES_TABLES_BIR
+BEFORE INSERT ON TBL_RES_TABLES
+FOR EACH ROW
+BEGIN
+  IF :NEW.TABLE_ID IS NULL THEN
+    :NEW.TABLE_ID := SEQ_RES_TABLES.NEXTVAL;
+  END IF;
+
+  :NEW.CREATED_DATE := NVL(:NEW.CREATED_DATE, SYSDATE);
+END;
+/
+
+-- Trigger: Update UPDATED_DATE on table update
+CREATE OR REPLACE TRIGGER TRG_TBL_RES_TABLES_BUR
+BEFORE UPDATE ON TBL_RES_TABLES
+FOR EACH ROW
+BEGIN
+  :NEW.UPDATED_DATE := SYSDATE;
+END;
+/
+
+-- Trigger: Auto-populate RESERVATION_ID and audit columns on INSERT
+CREATE OR REPLACE TRIGGER TRG_TBL_RES_RESERV_BIR
+BEFORE INSERT ON TBL_RES_RESERVATIONS
+FOR EACH ROW
+BEGIN
+  IF :NEW.RESERVATION_ID IS NULL THEN
+    :NEW.RESERVATION_ID := SEQ_RES_RESERVATIONS.NEXTVAL;
+  END IF;
+
+  IF :NEW.RESERVATION_NUMBER IS NULL THEN
+    :NEW.RESERVATION_NUMBER := 'RES-' || LPAD(:NEW.RESERVATION_ID, 6, '0');
+  END IF;
+
+  :NEW.CREATED_BY := NVL(:NEW.CREATED_BY, USER);
+  :NEW.CREATED_DATE := NVL(:NEW.CREATED_DATE, SYSDATE);
+END;
+/
+
+-- Trigger: Update audit columns and timestamps on UPDATE
+CREATE OR REPLACE TRIGGER TRG_TBL_RES_RESERV_BUR
+BEFORE UPDATE ON TBL_RES_RESERVATIONS
+FOR EACH ROW
+BEGIN
+  :NEW.UPDATED_BY := USER;
+  :NEW.UPDATED_DATE := SYSDATE;
+
+  -- Set seated time when status changes to SEATED
+  IF :NEW.STATUS = 'SEATED' AND :OLD.STATUS != 'SEATED' THEN
+    :NEW.SEATED_TIME := SYSDATE;
+  END IF;
+
+  -- Set completed time when status changes to COMPLETED
+  IF :NEW.STATUS = 'COMPLETED' AND :OLD.STATUS != 'COMPLETED' THEN
+    :NEW.COMPLETED_TIME := SYSDATE;
+  END IF;
+END;
+/
+
+PROMPT
+PROMPT Triggers created successfully!
+PROMPT
